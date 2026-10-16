@@ -313,7 +313,9 @@ export default grammar({
     _struct_declaration_initializer: $ => seq(
       repeat($._attribute_list),
       repeat($.modifier),
-      optional('ref'),
+      // `partial` must come right before `struct`, so after `ref`:
+      // `public ref partial struct S`.
+      optional(seq('ref', optional(alias('partial', $.modifier)))),
       'struct',
       field('name', $.identifier),
       repeat(choice($.type_parameter_list, $.parameter_list, $.base_list)),
@@ -1559,9 +1561,28 @@ export default grammar({
       $.expression,
     )),
 
+    // The operand is any pointer-typed unary expression, not only an
+    // lvalue: `*(long*)&d` and `*((int*)p)` dereference a cast.
     _pointer_indirection_expression: $ => prec.right(PREC.UNARY, seq(
       '*',
-      $.lvalue_expression,
+      choice(
+        $.lvalue_expression,
+        alias($._pointer_cast_expression, $.cast_expression),
+        $.parenthesized_expression,
+      ),
+    )),
+
+    // A cast under `*` takes a unary operand, so `*(int*)p = 1` assigns
+    // through the pointer rather than casting the assignment `p = 1`.
+    _pointer_cast_expression: $ => prec(PREC.CAST, seq(
+      '(',
+      field('type', $.type),
+      ')',
+      field('value', choice(
+        $.lvalue_expression,
+        $.parenthesized_expression,
+        alias($._address_of_expression, $.prefix_unary_expression),
+      )),
     )),
 
     // Address-of is split out from `prefix_unary_expression` so that

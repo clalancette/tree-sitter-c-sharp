@@ -485,9 +485,38 @@ bool tree_sitter_c_sharp_external_scanner_scan(void *payload, TSLexer *lexer, co
     if (valid_symbols[INTERPOLATION_END_QUOTE] && scanner->interpolation_stack.size > 0) {
         Interpolation *current_interpolation = array_back(&scanner->interpolation_stack);
 
-        while (lexer->lookahead == '"') {
-            advance(lexer);
-            quote_count++;
+        // In a verbatim (non-raw) string, `""` is an escaped quote. A run
+        // of quotes right after an interpolation hole, as in
+        // $@"-i ""{x}""", is its escaped pairs followed, when the run is
+        // odd, by the closing quote: the pairs are string content, and
+        // the closing quote is lexed on the next call.
+        if (is_verbatim(current_interpolation) && !is_raw(current_interpolation) &&
+            current_interpolation->quote_count == 1 && valid_symbols[INTERPOLATION_STRING_CONTENT]) {
+            uint8_t run = 0;
+            while (lexer->lookahead == '"') {
+                advance(lexer);
+                run++;
+                if (run % 2 == 0) {
+                    lexer->mark_end(lexer);
+                }
+            }
+            if (run >= 2 && run % 2 == 1) {
+                lexer->result_symbol = INTERPOLATION_STRING_CONTENT;
+                return true;
+            }
+            if (run == 1) {
+                lexer->mark_end(lexer);
+                lexer->result_symbol = INTERPOLATION_END_QUOTE;
+                array_pop(&scanner->interpolation_stack);
+                return true;
+            }
+            // An even run is all escapes: carry on as string content.
+            quote_count = run;
+        } else {
+            while (lexer->lookahead == '"') {
+                advance(lexer);
+                quote_count++;
+            }
         }
 
         if (quote_count == current_interpolation->quote_count) {
