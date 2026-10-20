@@ -56,6 +56,16 @@ export default grammar({
     [$.tuple_pattern, $._simple_name],
 
     [$.lvalue_expression, $._name],
+    // A constant pattern's binary expression, the dotted constant directly
+    // under `is` and a cast's two kinds of type each mirror a rule that can
+    // read the same tokens; the parser keeps both readings until the input
+    // decides (see `constant_pattern`, `is_pattern_expression` and
+    // `cast_expression`). A pointer cast reads its type as `type`.
+    [$.binary_expression, $._constant_pattern_binary_expression],
+    [$.constant_pattern, $._dotted_constant_pattern],
+    [$.constant_pattern, $.lvalue_expression, $._dotted_constant_pattern],
+    [$._name, $._non_name_type],
+    [$.type, $._non_name_type],
     [$.parameter, $.lvalue_expression],
     // C# 14 null-conditional assignment: `obj?.x = v` requires
     // `conditional_access_expression` to appear in both lvalue and
@@ -134,6 +144,8 @@ export default grammar({
     // simple-lambda parameter list (at least one element has a parameter
     // modifier) closed by ')=>'.
     $._lambda_paren_open,
+    // Zero-width, after the `)` of a cast to a name: see `cast_expression`.
+    $._name_cast_operand_start,
   ],
 
   extras: $ => [
@@ -1243,8 +1255,11 @@ export default grammar({
       $._variable_designation,
     ),
 
+    // A constant pattern is a shift-level expression, as in the C# spec:
+    // a lower-precedence operator after it ends the pattern, so
+    // `x is null && y` is `(x is null) && y`.
     constant_pattern: $ => choice(
-      $.binary_expression,
+      alias($._constant_pattern_binary_expression, $.binary_expression),
       $.default_expression,
       $.interpolated_string_expression,
       $.parenthesized_expression,
@@ -1301,7 +1316,9 @@ export default grammar({
     // C# 11 slice pattern: `..` optionally followed by a subpattern that
     // binds the captured slice. `[a, .. var rest, z]`, `[..]` (bare),
     // `[.. List<int> rest]` (declaration_pattern), etc.
-    slice_pattern: $ => prec.right(seq(
+    // Above `range_expression`, so that `[..]` in a pattern is a list
+    // pattern with a slice rather than a collection of an empty range.
+    slice_pattern: $ => prec.right(PREC.RANGE + 1, seq(
       '..',
       optional($.pattern),
     )),
@@ -1486,8 +1503,9 @@ export default grammar({
       $.parenthesized_expression,
     ),
 
+    // A ref-returning call is assignable: `GetRef(0) = v`.
     assignment_expression: $ => seq(
-      field('left', $.lvalue_expression),
+      field('left', choice($.lvalue_expression, $.invocation_expression)),
       field('operator',
         choice(
           '=',
@@ -1544,6 +1562,26 @@ export default grammar({
       )),
     ),
 
+    _constant_pattern_binary_expression: $ => choice(
+      ...[
+        ['>>', PREC.SHIFT],
+        ['>>>', PREC.SHIFT],
+        ['<<', PREC.SHIFT],
+        ['+', PREC.ADD],
+        ['-', PREC.ADD],
+        ['*', PREC.MULT],
+        ['/', PREC.MULT],
+        ['%', PREC.MULT],
+      ].map(([operator, precedence]) =>
+        prec.left(precedence, seq(
+          field('left', $.expression),
+          // @ts-ignore
+          field('operator', operator),
+          field('right', $.expression),
+        )),
+      ),
+    ),
+
     postfix_unary_expression: $ => prec(PREC.POSTFIX, seq(
       choice($.expression, $.lvalue_expression),
       choice('++', '--', '!'),
@@ -1582,6 +1620,7 @@ export default grammar({
       ')',
       field('value', choice(
         $.lvalue_expression,
+        $.invocation_expression,
         $.parenthesized_expression,
         alias($._address_of_expression, $.prefix_unary_expression),
       )),
@@ -1710,15 +1749,56 @@ export default grammar({
     is_pattern_expression: $ => prec(PREC.REL, seq(
       field('expression', $.expression),
       'is',
-      field('pattern', $.pattern),
+      // A dotted constant followed by a lower-precedence operator also
+      // reads as `(x is A).B …`, which C# never means: prefer the
+      // constant directly under `is`.
+      field('pattern', choice(
+        $.pattern,
+        prec.dynamic(1, alias($._dotted_constant_pattern, $.constant_pattern)),
+      )),
     )),
 
-    cast_expression: $ => prec(PREC.CAST, prec.dynamic(1, seq( // higher than invocation, lower than binary
-      '(',
-      field('type', $.type),
-      ')',
-      field('value', $.expression),
-    ))),
+    _dotted_constant_pattern: $ => $.member_access_expression,
+
+    // `(T)x` reads both as a cast and, when `T` is also an expression, as a
+    // parenthesized expression followed by `x`. The C# spec (§12.9.8) makes
+    // it a cast only when the type cannot be an expression or the token
+    // after `)` cannot continue one (`~`, `!`, `(`, a name, a literal, a
+    // keyword other than `as` and `is`): `(a) - b` subtracts, `(a) & b` is a
+    // bitwise and, `(IntPtr) &x` is `IntPtr & x` (an error, CS0119), and
+    // `(int)-1`, `(T*)&x` and `(G::T)-x` are casts. The external scanner
+    // checks the token after `)`, as Roslyn's `ScanCast` does, accepting
+    // `[` only as the empty collection `[]`. (Roslyn also casts a generic
+    // name to a non-empty collection, `(List<int>)[1, 2]`; here that is an
+    // element access.)
+    cast_expression: $ => choice(
+      prec(PREC.CAST, prec.dynamic(1, seq( // higher than invocation, lower than binary
+        '(',
+        field('type', $._non_name_type),
+        ')',
+        field('value', $.expression),
+      ))),
+      prec(PREC.CAST, prec.dynamic(1, seq(
+        '(',
+        field('type', $._name),
+        ')',
+        $._name_cast_operand_start,
+        field('value', $.expression),
+      ))),
+    ),
+
+    _non_name_type: $ => choice(
+      $.implicit_type,
+      $.array_type,
+      $.alias_qualified_name,
+      $.nullable_type,
+      $.pointer_type,
+      $.function_pointer_type,
+      $.predefined_type,
+      $.tuple_type,
+      $.ref_type,
+      $.scoped_type,
+    ),
 
     checked_expression: $ => seq(
       choice('checked', 'unchecked'),

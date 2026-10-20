@@ -19,6 +19,7 @@ enum TokenType {
     RAW_STRING_END,
     RAW_STRING_CONTENT,
     LAMBDA_PAREN_OPEN,
+    NAME_CAST_OPERAND_START,
 };
 
 typedef enum {
@@ -312,6 +313,38 @@ bool tree_sitter_c_sharp_external_scanner_scan(void *payload, TSLexer *lexer, co
     uint8_t brace_advanced = 0;
     uint8_t quote_count = 0;
     bool did_advance = false;
+
+    // After the `)` of a cast to a name, `(T)`: a zero-width token when
+    // the next token can start a cast operand, by the C# spec's cast
+    // disambiguation (§12.9.8) as Roslyn's `ScanCast` applies it: `~`, `!`
+    // (not `!=`), `(`, a name, a literal or a keyword, or `[` as the empty
+    // collection `[]`. Anything else, such as `-`, `&`, `*` or `.`, makes
+    // `(T)` a parenthesized expression. In error recovery every symbol is
+    // valid, OPT_SEMI among them; emit nothing there.
+    if (valid_symbols[NAME_CAST_OPERAND_START] && !valid_symbols[OPT_SEMI]) {
+        lexer->mark_end(lexer);
+        while (iswspace(lexer->lookahead)) {
+            advance(lexer);
+        }
+        int32_t c = lexer->lookahead;
+        bool starts = c == '~' || c == '(' || c == '"' || c == '\'' || c == '@' || c == '$' ||
+                      c == '_' || iswalnum(c) || c >= 0x80;
+        if (c == '!') {
+            advance(lexer);
+            starts = lexer->lookahead != '=';
+        } else if (c == '[') {
+            advance(lexer);
+            while (iswspace(lexer->lookahead)) {
+                advance(lexer);
+            }
+            starts = lexer->lookahead == ']';
+        }
+        if (!starts) {
+            return false;
+        }
+        lexer->result_symbol = NAME_CAST_OPERAND_START;
+        return true;
+    }
 
     // Lambda-paren scanning advances forward speculatively past the
     // opening `(`. If it consumes input and then bails, the lexer
