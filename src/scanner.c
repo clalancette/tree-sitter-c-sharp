@@ -486,10 +486,13 @@ bool tree_sitter_c_sharp_external_scanner_scan(void *payload, TSLexer *lexer, co
         Interpolation *current_interpolation = array_back(&scanner->interpolation_stack);
 
         // In a verbatim (non-raw) string, `""` is an escaped quote. A run
-        // of quotes right after an interpolation hole, as in
-        // $@"-i ""{x}""", is its escaped pairs followed, when the run is
-        // odd, by the closing quote: the pairs are string content, and
-        // the closing quote is lexed on the next call.
+        // of quotes, as in $@"-i ""{x}""" or $@"""{x}""", is its escaped
+        // pairs followed, when the run is odd, by the closing quote: the
+        // pairs are string content, and the closing quote is lexed on the
+        // next call. An even run is all escapes and carries on as string
+        // content, unless a hole follows it directly: the open-brace
+        // handler below would lex that hole's brace as a token spanning
+        // the pairs, so the pairs are a token of their own.
         if (is_verbatim(current_interpolation) && !is_raw(current_interpolation) &&
             current_interpolation->quote_count == 1 && valid_symbols[INTERPOLATION_STRING_CONTENT]) {
             uint8_t run = 0;
@@ -500,7 +503,7 @@ bool tree_sitter_c_sharp_external_scanner_scan(void *payload, TSLexer *lexer, co
                     lexer->mark_end(lexer);
                 }
             }
-            if (run >= 2 && run % 2 == 1) {
+            if (run >= 2 && (run % 2 == 1 || lexer->lookahead == '{')) {
                 lexer->result_symbol = INTERPOLATION_STRING_CONTENT;
                 return true;
             }
@@ -510,7 +513,6 @@ bool tree_sitter_c_sharp_external_scanner_scan(void *payload, TSLexer *lexer, co
                 array_pop(&scanner->interpolation_stack);
                 return true;
             }
-            // An even run is all escapes: carry on as string content.
             quote_count = run;
         } else {
             while (lexer->lookahead == '"') {
