@@ -8790,17 +8790,13 @@
                   "name": "pattern"
                 },
                 {
-                  "type": "PREC_DYNAMIC",
-                  "value": 1,
+                  "type": "ALIAS",
                   "content": {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_dotted_constant_pattern"
-                    },
-                    "named": true,
-                    "value": "constant_pattern"
-                  }
+                    "type": "SYMBOL",
+                    "name": "_dotted_constant_pattern"
+                  },
+                  "named": true,
+                  "value": "constant_pattern"
                 }
               ]
             }
@@ -8809,8 +8805,56 @@
       }
     },
     "_dotted_constant_pattern": {
-      "type": "SYMBOL",
-      "name": "member_access_expression"
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_dotted_constant"
+      },
+      "named": true,
+      "value": "member_access_expression"
+    },
+    "_dotted_constant": {
+      "type": "PREC_DYNAMIC",
+      "value": 1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "FIELD",
+            "name": "expression",
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "identifier"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_dotted_constant"
+                  },
+                  "named": true,
+                  "value": "member_access_expression"
+                }
+              ]
+            }
+          },
+          {
+            "type": "STRING",
+            "value": "."
+          },
+          {
+            "type": "FIELD",
+            "name": "name",
+            "content": {
+              "type": "SYMBOL",
+              "name": "identifier"
+            }
+          }
+        ]
+      }
     },
     "cast_expression": {
       "type": "CHOICE",
@@ -13066,6 +13110,14 @@
       "constant_pattern",
       "lvalue_expression",
       "_dotted_constant_pattern"
+    ],
+    [
+      "_dotted_constant_pattern",
+      "_dotted_constant"
+    ],
+    [
+      "_simple_name",
+      "_dotted_constant"
     ],
     [
       "_name",

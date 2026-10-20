@@ -64,6 +64,8 @@ export default grammar({
     [$.binary_expression, $._constant_pattern_binary_expression],
     [$.constant_pattern, $._dotted_constant_pattern],
     [$.constant_pattern, $.lvalue_expression, $._dotted_constant_pattern],
+    [$._dotted_constant_pattern, $._dotted_constant],
+    [$._simple_name, $._dotted_constant],
     [$._name, $._non_name_type],
     [$.type, $._non_name_type],
     [$.parameter, $.lvalue_expression],
@@ -1749,16 +1751,27 @@ export default grammar({
     is_pattern_expression: $ => prec(PREC.REL, seq(
       field('expression', $.expression),
       'is',
-      // A dotted constant followed by a lower-precedence operator also
-      // reads as `(x is A).B …`, which C# never means: prefer the
-      // constant directly under `is`.
+      // A dotted constant also reads as `(x is A).B`, or `(x is A.B).C`,
+      // which C# never means: prefer the whole constant directly under
+      // `is`.
       field('pattern', choice(
         $.pattern,
-        prec.dynamic(1, alias($._dotted_constant_pattern, $.constant_pattern)),
+        alias($._dotted_constant_pattern, $.constant_pattern),
       )),
     )),
 
-    _dotted_constant_pattern: $ => $.member_access_expression,
+    _dotted_constant_pattern: $ => alias($._dotted_constant, $.member_access_expression),
+
+    // Each `.` counts once, so the longest dotted constant outweighs any
+    // shorter one under a member access.
+    _dotted_constant: $ => prec.dynamic(1, seq(
+      field('expression', choice(
+        $.identifier,
+        alias($._dotted_constant, $.member_access_expression),
+      )),
+      '.',
+      field('name', $.identifier),
+    )),
 
     // `(T)x` reads both as a cast and, when `T` is also an expression, as a
     // parenthesized expression followed by `x`. The C# spec (§12.9.8) makes
