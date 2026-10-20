@@ -530,19 +530,45 @@ bool tree_sitter_c_sharp_external_scanner_scan(void *payload, TSLexer *lexer, co
         did_advance = quote_count > 0;
     }
 
-    if (valid_symbols[INTERPOLATION_OPEN_BRACE] && scanner->interpolation_stack.size > 0) {
+    // Not after quotes the end-quote handler read: a brace token would
+    // span them. The content handler ends the content before the brace.
+    if (valid_symbols[INTERPOLATION_OPEN_BRACE] && scanner->interpolation_stack.size > 0 && !did_advance) {
         Interpolation *current_interpolation = array_back(&scanner->interpolation_stack);
+        uint8_t dollar_count = current_interpolation->dollar_count;
+        bool raw = is_raw(current_interpolation);
 
-        while (lexer->lookahead == '{' && brace_advanced < current_interpolation->dollar_count) {
+        // A run of braces is read whole before it is split. In a non-raw
+        // string, `{{` is an escaped brace and an odd run ends in a hole
+        // ($"{{{x}}}"); in a raw string, the last `dollar_count` braces of
+        // a longer run open the hole and the ones before are content
+        // ($$"""{{{x}}}"""). The content part is returned first, ending at
+        // the last pair (non-raw) or after the first brace (raw), and the
+        // hole is lexed on a later call.
+        while (lexer->lookahead == '{' && brace_advanced < UINT8_MAX) {
             advance(lexer);
             brace_advanced++;
+            if (raw ? brace_advanced == 1 : brace_advanced % 2 == 0) {
+                lexer->mark_end(lexer);
+            }
         }
 
-        if (brace_advanced > 0 && brace_advanced == current_interpolation->dollar_count &&
-            (brace_advanced == 0 || lexer->lookahead != '{')) {
+        if (brace_advanced > 0 && brace_advanced == dollar_count) {
+            lexer->mark_end(lexer);
             current_interpolation->open_brace_count = brace_advanced;
             lexer->result_symbol = INTERPOLATION_OPEN_BRACE;
             return true;
+        }
+
+        if (brace_advanced > dollar_count && (raw || brace_advanced % 2 == 1) &&
+            valid_symbols[INTERPOLATION_STRING_CONTENT]) {
+            lexer->result_symbol = INTERPOLATION_STRING_CONTENT;
+            return true;
+        }
+
+        // An even run of escapes: carry on as string content.
+        if (!raw && brace_advanced > 0) {
+            brace_advanced = 0;
+            did_advance = true;
         }
     }
 
