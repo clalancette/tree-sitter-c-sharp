@@ -8808,12 +8808,12 @@
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_dotted_constant"
+        "name": "dotted_constant"
       },
       "named": true,
       "value": "member_access_expression"
     },
-    "_dotted_constant": {
+    "dotted_constant": {
       "type": "PREC_DYNAMIC",
       "value": 1,
       "content": {
@@ -8833,7 +8833,7 @@
                   "type": "ALIAS",
                   "content": {
                     "type": "SYMBOL",
-                    "name": "_dotted_constant"
+                    "name": "dotted_constant"
                   },
                   "named": true,
                   "value": "member_access_expression"
@@ -13113,11 +13113,11 @@
     ],
     [
       "_dotted_constant_pattern",
-      "_dotted_constant"
+      "dotted_constant"
     ],
     [
       "_simple_name",
-      "_dotted_constant"
+      "dotted_constant"
     ],
     [
       "_name",

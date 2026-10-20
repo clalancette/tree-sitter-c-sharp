@@ -64,8 +64,8 @@ export default grammar({
     [$.binary_expression, $._constant_pattern_binary_expression],
     [$.constant_pattern, $._dotted_constant_pattern],
     [$.constant_pattern, $.lvalue_expression, $._dotted_constant_pattern],
-    [$._dotted_constant_pattern, $._dotted_constant],
-    [$._simple_name, $._dotted_constant],
+    [$._dotted_constant_pattern, $.dotted_constant],
+    [$._simple_name, $.dotted_constant],
     [$._name, $._non_name_type],
     [$.type, $._non_name_type],
     [$.parameter, $.lvalue_expression],
@@ -1760,14 +1760,14 @@ export default grammar({
       )),
     )),
 
-    _dotted_constant_pattern: $ => alias($._dotted_constant, $.member_access_expression),
+    _dotted_constant_pattern: $ => alias($.dotted_constant, $.member_access_expression),
 
     // Each `.` counts once, so the longest dotted constant outweighs any
     // shorter one under a member access.
-    _dotted_constant: $ => prec.dynamic(1, seq(
+    dotted_constant: $ => prec.dynamic(1, seq(
       field('expression', choice(
         $.identifier,
-        alias($._dotted_constant, $.member_access_expression),
+        alias($.dotted_constant, $.member_access_expression),
       )),
       '.',
       field('name', $.identifier),
