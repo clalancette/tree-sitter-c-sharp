@@ -7748,8 +7748,17 @@
         "type": "SEQ",
         "members": [
           {
-            "type": "SYMBOL",
-            "name": "expression"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "lvalue_expression"
+              }
+            ]
           },
           {
             "type": "CHOICE",
@@ -7835,6 +7844,14 @@
                 "name": "lvalue_expression"
               },
               {
+                "type": "SYMBOL",
+                "name": "invocation_expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "postfix_unary_expression"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -7914,8 +7931,17 @@
             "value": "&"
           },
           {
-            "type": "SYMBOL",
-            "name": "lvalue_expression"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "lvalue_expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "invocation_expression"
+              }
+            ]
           }
         ]
       }
@@ -8554,8 +8580,17 @@
             "type": "FIELD",
             "name": "function",
             "content": {
-              "type": "SYMBOL",
-              "name": "expression"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "expression"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "lvalue_expression"
+                }
+              ]
             }
           },
           {
@@ -8730,8 +8765,17 @@
             "type": "FIELD",
             "name": "expression",
             "content": {
-              "type": "SYMBOL",
-              "name": "expression"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "expression"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "lvalue_expression"
+                }
+              ]
             }
           },
           {
@@ -9017,6 +9061,10 @@
                 {
                   "type": "SYMBOL",
                   "name": "expression"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "lvalue_expression"
                 },
                 {
                   "type": "SYMBOL",

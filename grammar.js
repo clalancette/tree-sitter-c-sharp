@@ -1545,7 +1545,7 @@ export default grammar({
     ),
 
     postfix_unary_expression: $ => prec(PREC.POSTFIX, seq(
-      $.expression,
+      choice($.expression, $.lvalue_expression),
       choice('++', '--', '!'),
     )),
 
@@ -1567,6 +1567,8 @@ export default grammar({
       '*',
       choice(
         $.lvalue_expression,
+        $.invocation_expression,
+        $.postfix_unary_expression,
         alias($._pointer_cast_expression, $.cast_expression),
         $.parenthesized_expression,
       ),
@@ -1596,9 +1598,17 @@ export default grammar({
     // `(b > 0)` is not — so the cast interpretation can no longer
     // consume the trailing parenthesized expression and `&&` must
     // be emitted as a single token for the binary path to succeed.
+    //
+    // A call is an operand too: the address of a ref return, as in
+    // `&MemoryMarshal.GetReference(span)`. Member access, element access,
+    // invocation and postfix operators take an lvalue as their object
+    // directly (as well as any expression), so after `& x` (or `* p`) a
+    // following `.`, `->`, `[`, `(`, `++` or `--` is a shift that binds
+    // tighter than the unary operator: `&a.b` is `&(a.b)` and `*p.q` is
+    // `*(p.q)`, not `(&a).b` and `(*p).q`.
     _address_of_expression: $ => prec.right(PREC.UNARY, seq(
       '&',
-      $.lvalue_expression,
+      choice($.lvalue_expression, $.invocation_expression),
     )),
 
     query_expression: $ => seq($.from_clause, $._query_body),
@@ -1718,7 +1728,7 @@ export default grammar({
     ),
 
     invocation_expression: $ => prec(PREC.INVOCATION, seq(
-      field('function', $.expression),
+      field('function', choice($.expression, $.lvalue_expression)),
       field('arguments', $.argument_list),
     )),
 
@@ -1752,7 +1762,7 @@ export default grammar({
     throw_expression: $ => seq('throw', $.expression),
 
     element_access_expression: $ => prec(PREC.POSTFIX, seq(
-      field('expression', $.expression),
+      field('expression', choice($.expression, $.lvalue_expression)),
       field('subscript', $.bracketed_argument_list),
     )),
 
@@ -1806,7 +1816,7 @@ export default grammar({
     interpolation_format_clause: _ => seq(':', /[^}"]+/),
 
     member_access_expression: $ => prec(PREC.DOT, seq(
-      field('expression', choice($.expression, $.predefined_type, $._name)),
+      field('expression', choice($.expression, $.lvalue_expression, $.predefined_type, $._name)),
       choice('.', '->'),
       field('name', $._simple_name),
     )),
